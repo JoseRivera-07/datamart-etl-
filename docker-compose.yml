@@ -1,0 +1,76 @@
+x-airflow-common: &airflow-common
+  image: apache/airflow:2.8.1
+  env_file:
+    - .env
+  environment:
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_DB_USER}:${AIRFLOW_DB_PASSWORD}@postgres-airflow:5432/${AIRFLOW_DB_NAME}
+    AIRFLOW__CORE__FERNET_KEY: ${FERNET_KEY}
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./logs:/opt/airflow/logs
+    - ./plugins:/opt/airflow/plugins
+    - ./data:/opt/airflow/data
+  depends_on:
+    postgres-airflow:
+      condition: service_healthy
+
+services:
+  postgres-airflow:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: ${AIRFLOW_DB_USER}
+      POSTGRES_PASSWORD: ${AIRFLOW_DB_PASSWORD}
+      POSTGRES_DB: ${AIRFLOW_DB_NAME}
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${AIRFLOW_DB_USER}", "-d", "${AIRFLOW_DB_NAME}"]
+      interval: 5s
+      retries: 5
+    volumes:
+      - postgres-airflow-data:/var/lib/postgresql/data
+
+  postgres-dw:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: ${DW_USER}
+      POSTGRES_PASSWORD: ${DW_PASSWORD}
+      POSTGRES_DB: ${DW_DB}
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${DW_USER}", "-d", "${DW_DB}"]
+      interval: 5s
+      retries: 5
+    volumes:
+      - postgres-dw-data:/var/lib/postgresql/data
+      - ./sql/bronze_ddl.sql:/docker-entrypoint-initdb.d/01_bronze_ddl.sql
+      - ./sql/silver_ddl.sql:/docker-entrypoint-initdb.d/02_silver_ddl.sql
+      - ./sql/gold_ddl.sql:/docker-entrypoint-initdb.d/03_gold_ddl.sql
+
+  airflow-init:
+    <<: *airflow-common
+    command: bash -c "airflow db migrate && airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@datamart.com && airflow connections add postgres_dw --conn-type postgres --conn-host postgres-dw --conn-schema ${DW_DB} --conn-login ${DW_USER} --conn-password ${DW_PASSWORD} --conn-port 5432 && airflow variables set csv_path_1 /opt/airflow/data/data.csv && airflow variables set csv_path_2 /opt/airflow/data/online_retail.csv && airflow variables set bronze_schema bronze && airflow variables set silver_schema silver && airflow variables set gold_schema gold"
+    depends_on:
+      postgres-airflow:
+        condition: service_healthy
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+volumes:
+  postgres-airflow-data:
+  postgres-dw-data:
