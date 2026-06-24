@@ -115,7 +115,7 @@ with DAG(
                     if description in ('NAN', 'NONE', ''):
                         description = 'SIN DESCRIPCION'
 
-                    customer_id = str(row['customer_id']).strip()
+                    customer_id = str(row['customer_id']).strip().upper()
                     if customer_id in ('NAN', 'NONE', ''):
                         customer_id = 'ANONYMOUS'
 
