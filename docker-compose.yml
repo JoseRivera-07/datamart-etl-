@@ -31,7 +31,7 @@ services:
       - postgres-airflow-data:/var/lib/postgresql/data
 
   postgres-dw:
-    image: postgres:15
+    image: postgres:13
     environment:
       POSTGRES_USER: ${DW_USER}
       POSTGRES_PASSWORD: ${DW_PASSWORD}
@@ -50,7 +50,8 @@ services:
 
   airflow-init:
     <<: *airflow-common
-    command: bash -c "airflow db migrate && airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@datamart.com && airflow connections add postgres_dw --conn-type postgres --conn-host postgres-dw --conn-schema ${DW_DB} --conn-login ${DW_USER} --conn-password ${DW_PASSWORD} --conn-port 5432 && airflow variables set csv_path_1 /opt/airflow/data/data.csv && airflow variables set csv_path_2 /opt/airflow/data/online_retail.csv && airflow variables set bronze_schema bronze && airflow variables set silver_schema silver && airflow variables set gold_schema gold"
+    command: bash -c "airflow db migrate && airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@datamart.com && airflow connections add postgres_dw --conn-type postgres --conn-host postgres-dw --conn-schema ${DW_DB} --conn-login ${DW_USER} --conn-password ${DW_PASSWORD} --conn-port 5432 && airflow connections add postgres_external --conn-type postgres --conn-host 15.204.173.204 --conn-schema jose_pd2 --conn-login coder-ra-c6 --conn-password 'Riwi2026**' --conn-port 6432 && airflow variables set csv_path_1 /opt/airflow/data/data.csv && airflow variables set csv_path_2 /opt/airflow/data/online_retail.csv && airflow variables set bronze_schema bronze && airflow variables set silver_schema silver && airflow variables set gold_schema gold"
+    
     depends_on:
       postgres-airflow:
         condition: service_healthy
